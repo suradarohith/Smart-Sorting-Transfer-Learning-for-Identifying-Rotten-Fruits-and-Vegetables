@@ -1,0 +1,95 @@
+
+!pip install tensorflow numpy matplotlib scikit-learn opencv-python-headless --quiet
+
+import tensorflow as tf
+import numpy as np
+import matplotlib.pyplot as plt
+import os
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from google.colab import files
+
+IMG_SIZE = 224
+BATCH_SIZE = 32
+EPOCHS = 5
+
+print("Please upload a ZIP of your dataset or upload 'dataset/' manually using the Files tab")
+
+if not os.path.isdir('dataset'):
+    uploaded = files.upload()
+    for fname in uploaded:
+        if fname.lower().endswith('.zip'):
+            zip_path = fname
+            !unzip -oq "$zip_path"
+
+datagen = ImageDataGenerator(
+    rescale=1./255,
+    validation_split=0.2
+)
+
+train_data = datagen.flow_from_directory(
+    'dataset',
+    target_size=(IMG_SIZE, IMG_SIZE),
+    batch_size=BATCH_SIZE,
+    class_mode='binary',
+    subset='training',
+    shuffle=True
+)
+
+val_data = datagen.flow_from_directory(
+    'dataset',
+    target_size=(IMG_SIZE, IMG_SIZE),
+    batch_size=BATCH_SIZE,
+    class_mode='binary',
+    subset='validation',
+    shuffle=False
+)
+
+base = tf.keras.applications.MobileNetV2(
+    input_shape=(IMG_SIZE, IMG_SIZE, 3),
+    include_top=False,
+    weights='imagenet'
+)
+base.trainable = False
+
+model = tf.keras.Sequential([
+    base,
+    tf.keras.layers.GlobalAveragePooling2D(),
+    tf.keras.layers.Dense(128, activation='relu'),
+    tf.keras.layers.Dropout(0.3),
+    tf.keras.layers.Dense(1, activation='sigmoid')
+])
+
+model.compile(
+    optimizer='adam',
+    loss='binary_crossentropy',
+    metrics=['accuracy']
+)
+
+history = model.fit(
+    train_data,
+    validation_data=val_data,
+    epochs=EPOCHS
+)
+
+loss, acc = model.evaluate(val_data)
+print(f"Validation accuracy: {acc * 100:.2f}%")
+
+plt.figure(figsize=(12, 5))
+
+plt.subplot(1, 2, 1)
+plt.plot(history.history['accuracy'], label='Train Accuracy')
+plt.plot(history.history['val_accuracy'], label='Validation Accuracy')
+plt.legend()
+plt.title('Accuracy')
+
+plt.subplot(1, 2, 2)
+plt.plot(history.history['loss'], label='Train Loss')
+plt.plot(history.history['val_loss'], label='Validation Loss')
+plt.legend()
+plt.title('Loss')
+
+plt.tight_layout()
+plt.show()
+
+model.save('smart_sorting_model.h5')
+print("Model saved as smart_sorting_model.h5")
